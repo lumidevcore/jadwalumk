@@ -94,7 +94,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
     <div class="logo">UMK</div>
     <div>
       <h1>Upload Jadwal</h1>
-      <p>Universitas Muria Kudus <span style="margin-left:6px;color:#d4a030;font-weight:800">v6.3</span></p>
+      <p>Universitas Muria Kudus <span style="margin-left:6px;color:#d4a030;font-weight:800">v6.4</span></p>
     </div>
     <a href="index.php" class="back">← Kembali</a>
   </div>
@@ -390,7 +390,7 @@ async function pdfToImages(file, fast=true, maxPages=2) {
   for (let i = 1; i <= count; i++) {
     const page = await pdf.getPage(i);
     // V5 FAST: resolusi lebih rendah + JPEG lebih kecil. Teks masih cukup tajam untuk dokumen jadwal.
-    const scale = fast ? 0.95 : 1.55;
+    const scale = fast ? 1.45 : 1.75;
     const vp = page.getViewport({scale});
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(vp.width);
@@ -399,7 +399,7 @@ async function pdfToImages(file, fast=true, maxPages=2) {
     ctx.fillStyle = '#fff';
     ctx.fillRect(0,0,canvas.width,canvas.height);
     await page.render({canvasContext: ctx, viewport: vp}).promise;
-    const quality = fast ? 0.66 : 0.88;
+    const quality = fast ? 0.86 : 0.92;
     images.push(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
   }
   return {images, totalPages:pdf.numPages, sentPages:count};
@@ -701,10 +701,21 @@ async function run() {
     }
 
     // Format JSON ringkas mengurangi token output secara drastis.
-    const PROMPT = `Baca jadwal kuliah UMK. Balas HANYA 1 JSON valid. Jangan beri penjelasan, markdown, atau reasoning.
-Schema ringkas:
+    const PROMPT = `Baca jadwal kuliah UMK dari dokumen ini. Balas HANYA 1 JSON valid, tanpa markdown, tanpa penjelasan, tanpa reasoning.
+
+Schema WAJIB:
 {"u":"UMK","f":"","s":"","m":{"n":"nama","i":"nim","p":"prodi","d":"dosen PA","t":"total sks","c":"tanggal"},"r":[["no","kelas","kode","nama mk","dosen","sks","senin","selasa","rabu","kamis","jumat","sabtu","minggu"]]}
-Isi hanya data yang terlihat. Jam+ruang satukan singkat. Kosong="". Jangan ulang header tabel. Semua mata kuliah harus masuk.
+
+ATURAN PENTING:
+1. Urutan kolom jadwal WAJIB persis:
+   senin=Sn, selasa=Sl, rabu=Rb, kamis=Km, jumat=Jm, sabtu=Sb, minggu=Mg.
+2. Jangan menggeser jadwal ke kolom hari lain. Baca posisi sel pada tabel secara visual.
+3. Jika sebuah sel hari kosong, isi "".
+4. Jam dan ruang pada sel yang sama digabung singkat, contoh: "09:40-11:19 J.4,06".
+5. Salin kode mata kuliah, kelas, nama mata kuliah, dosen, SKS, NIM, semester, dan total SKS SEAKURAT MUNGKIN dari dokumen. Jangan menebak.
+6. Semua baris mata kuliah harus masuk tepat satu kali.
+7. Sebelum mengeluarkan JSON, periksa ulang secara internal bahwa setiap jadwal berada pada kolom hari yang sama seperti tabel sumber.
+
 ${useText ? '\nSUMBER TEKS PDF:\n' + pdfText.slice(0,12000) : ''}`;
 
     const msg = { role:'user', content:PROMPT };
@@ -716,7 +727,7 @@ ${useText ? '\nSUMBER TEKS PDF:\n' + pdfText.slice(0,12000) : ''}`;
       think: false,
       format: 'json',
       keep_alive: '10m',
-      options: { temperature: 0, num_ctx: useText ? 4096 : 8192, num_predict: useText ? 700 : 900, top_k: 10, top_p: 0.9 }
+      options: { temperature: 0, num_ctx: useText ? 4096 : 12288, num_predict: useText ? 700 : 1100, top_k: 10, top_p: 0.9 }
     };
 
     const chatController = new AbortController();
