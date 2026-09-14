@@ -94,7 +94,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
     <div class="logo">UMK</div>
     <div>
       <h1>Upload Jadwal</h1>
-      <p>Universitas Muria Kudus <span style="margin-left:6px;color:#d4a030;font-weight:800">v6.4</span></p>
+      <p>Universitas Muria Kudus <span style="margin-left:6px;color:#d4a030;font-weight:800">v6.5</span></p>
     </div>
     <a href="index.php" class="back">← Kembali</a>
   </div>
@@ -401,6 +401,23 @@ async function pdfToImages(file, fast=true, maxPages=2) {
     await page.render({canvasContext: ctx, viewport: vp}).promise;
     const quality = fast ? 0.86 : 0.92;
     images.push(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
+
+    // Mode akurat: kirim juga crop area tabel agar posisi kolom hari lebih mudah dibaca model.
+    // Jadwal Kanal UMK biasanya menempatkan tabel di area tengah halaman.
+    if (!fast) {
+      const crop = document.createElement('canvas');
+      const sx = Math.floor(canvas.width * 0.03);
+      const sy = Math.floor(canvas.height * 0.20);
+      const sw = Math.floor(canvas.width * 0.94);
+      const sh = Math.floor(canvas.height * 0.62);
+      crop.width = sw;
+      crop.height = sh;
+      const cctx = crop.getContext('2d', {alpha:false});
+      cctx.fillStyle = '#fff';
+      cctx.fillRect(0,0,sw,sh);
+      cctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+      images.push(crop.toDataURL('image/jpeg', 0.94).split(',')[1]);
+    }
   }
   return {images, totalPages:pdf.numPages, sentPages:count};
 }
@@ -669,6 +686,128 @@ td.emp { text-align: center; color: #d0d5e5; font-size: 14px; }
 </html>`;
 }
 
+
+function parseAiJson(data) {
+  let raw = String(data?.message?.content || '').trim();
+  raw = raw.replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/\s*```$/i,'').trim();
+
+  let obj = null;
+  try {
+    obj = JSON.parse(raw);
+  } catch (e) {
+    const a = raw.indexOf('{');
+    const b = raw.lastIndexOf('}');
+    if (a >= 0 && b > a) {
+      try { obj = JSON.parse(raw.slice(a, b + 1)); } catch (_) {}
+    }
+  }
+  return {obj, raw};
+}
+
+function normalizeJadwalData(jadwal) {
+  if (!jadwal) return null;
+
+  if (Array.isArray(jadwal.r)) {
+    const mm = jadwal.m || {};
+    const validRows = jadwal.r.filter(r => Array.isArray(r));
+    return {
+      universitas: jadwal.u || 'Universitas Muria Kudus',
+      fakultas: jadwal.f || '',
+      semester: jadwal.s || '',
+      mahasiswa: {
+        nama: mm.n || '',
+        nim: mm.i || '',
+        prodi: mm.p || '',
+        dosen_pa: mm.d || '',
+        total_sks: mm.t || '',
+        tanggal_cetak: mm.c || ''
+      },
+      mata_kuliah: validRows.map((r,idx) => ({
+        no: r?.[0] ?? String(idx+1),
+        kelas: r?.[1] ?? '',
+        kode_mk: r?.[2] ?? '',
+        nama_mk: r?.[3] ?? '',
+        dosen: r?.[4] ?? '',
+        sks: r?.[5] ?? '',
+        sn: r?.[6] ?? '',
+        sl: r?.[7] ?? '',
+        rb: r?.[8] ?? '',
+        km: r?.[9] ?? '',
+        jm: r?.[10] ?? '',
+        sb: r?.[11] ?? '',
+        mg: r?.[12] ?? ''
+      }))
+    };
+  }
+
+  if (Array.isArray(jadwal.mata_kuliah)) return jadwal;
+  return null;
+}
+
+function jadwalNeedsRetry(jadwal) {
+  if (!jadwal || !Array.isArray(jadwal.mata_kuliah)) return true;
+  const rows = jadwal.mata_kuliah;
+  if (!rows.length) return true;
+
+  const good = rows.filter(r => {
+    const kode = String(r?.kode_mk || '').trim();
+    const nama = String(r?.nama_mk || '').trim();
+    const kelas = String(r?.kelas || '').trim();
+    const sks = String(r?.sks || '').trim();
+    return (kode.length >= 4 || nama.length >= 4) && kelas.length <= 4 && sks.length <= 3;
+  });
+
+  // Retry jika banyak baris rusak/placeholder atau metadata penting hilang.
+  if (good.length !== rows.length) return true;
+  if (!String(jadwal?.mahasiswa?.nim || '').trim()) return true;
+  if (!String(jadwal?.semester || '').trim()) return true;
+
+  // Dokumen jadwal kuliah biasanya memiliki lebih dari satu baris.
+  // Jika hanya 1–2 baris, lakukan verifikasi kedua agar baris yang terlewat dapat dipulihkan.
+  if (rows.length <= 2) return true;
+
+  return false;
+}
+
+async function askOllamaJson(model, prompt, images, timeoutMs=480000, numCtx=12288, numPredict=1200) {
+  const msg = { role:'user', content:prompt };
+  if (Array.isArray(images) && images.length) msg.images = images;
+
+  const payload = {
+    model,
+    messages: [msg],
+    stream: false,
+    think: false,
+    format: 'json',
+    keep_alive: '10m',
+    options: {
+      temperature: 0,
+      num_ctx: numCtx,
+      num_predict: numPredict,
+      top_k: 10,
+      top_p: 0.9
+    }
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(OLLAMA + '/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error('Ollama error: ' + err.slice(0, 240));
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── Main process ──
 async function run() {
   if (!selFile || !ollamaOk) return;
@@ -718,76 +857,59 @@ ATURAN PENTING:
 
 ${useText ? '\nSUMBER TEKS PDF:\n' + pdfText.slice(0,12000) : ''}`;
 
-    const msg = { role:'user', content:PROMPT };
-    if (!useText) msg.images = images;
-    const payload = {
+    let data = await askOllamaJson(
       model,
-      messages: [msg],
-      stream: false,
-      think: false,
-      format: 'json',
-      keep_alive: '10m',
-      options: { temperature: 0, num_ctx: useText ? 4096 : 12288, num_predict: useText ? 700 : 1100, top_k: 10, top_p: 0.9 }
-    };
-
-    const chatController = new AbortController();
-    const chatTimer = setTimeout(() => chatController.abort(), useText ? 180000 : 360000);
-    const res = await fetch(OLLAMA + '/api/chat', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload),
-      signal: chatController.signal
-    });
-    clearTimeout(chatTimer);
-
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error('Ollama error: ' + err.slice(0, 200));
-    }
+      PROMPT,
+      useText ? [] : images,
+      useText ? 180000 : 420000,
+      useText ? 4096 : 12288,
+      useText ? 700 : 1100
+    );
 
     setStep('Memproses data jadwal dari AI...');
-    const data = await res.json();
-    let raw = String(data.message?.content || '').trim();
+    let parsed = parseAiJson(data);
+    let jadwal = normalizeJadwalData(parsed.obj);
 
-    // Beberapa model kadang masih membungkus JSON dengan markdown.
-    raw = raw.replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/\s*```$/i,'').trim();
+    // Untuk PDF image-only, lakukan verifikasi kedua jika hasil pertama tampak tidak lengkap/rusak.
+    if (!useText && jadwalNeedsRetry(jadwal)) {
+      setStep('⚠ Hasil pertama belum lengkap.<br>Memverifikasi ulang tabel dengan gambar resolusi tinggi...');
 
-    let jadwal;
-    try {
-      jadwal = JSON.parse(raw);
-    } catch (e) {
-      // Fallback: ambil blok JSON pertama jika model menyisipkan teks tambahan.
-      const a = raw.indexOf('{');
-      const b = raw.lastIndexOf('}');
-      if (a >= 0 && b > a) {
-        try { jadwal = JSON.parse(raw.slice(a, b + 1)); } catch (_) {}
+      const accurate = await pdfToImages(selFile, false, 2);
+      const firstJson = parsed.obj ? JSON.stringify(parsed.obj).slice(0, 12000) : parsed.raw.slice(0, 12000);
+
+      const VERIFY_PROMPT = `Verifikasi ulang jadwal kuliah UMK dari gambar.
+Gambar pertama adalah halaman penuh; gambar berikutnya dapat berupa zoom area tabel.
+
+Hasil pembacaan sebelumnya mungkin SALAH atau TIDAK LENGKAP:
+${firstJson}
+
+Balas HANYA 1 JSON valid dengan schema:
+{"u":"UMK","f":"","s":"","m":{"n":"nama","i":"nim","p":"prodi","d":"dosen PA","t":"total sks","c":"tanggal"},"r":[["no","kelas","kode","nama mk","dosen","sks","senin","selasa","rabu","kamis","jumat","sabtu","minggu"]]}
+
+WAJIB:
+- Baca SEMUA baris tabel dari atas sampai bawah. Jangan berhenti setelah 1–2 baris.
+- Setiap elemen r HARUS array 13 kolom, bukan string.
+- Posisi hari harus mengikuti header tabel persis: Sn, Sl, Rb, Km, Jm, Sb, Mg.
+- Jangan menggeser jadwal satu kolom ke kiri/kanan.
+- Sel kosong = "".
+- Salin NIM, semester, total SKS, kode MK, kelas, dosen, jam, dan ruang dari gambar; jangan menebak.
+- Periksa ulang baris pertama dan terakhir sebelum mengirim JSON.`;
+
+      data = await askOllamaJson(model, VERIFY_PROMPT, accurate.images, 540000, 16384, 1500);
+      parsed = parseAiJson(data);
+      const retryJadwal = normalizeJadwalData(parsed.obj);
+
+      if (retryJadwal && Array.isArray(retryJadwal.mata_kuliah) && retryJadwal.mata_kuliah.length) {
+        jadwal = retryJadwal;
       }
     }
 
-    // Normalisasi schema ringkas -> schema tampilan.
-    if (jadwal && Array.isArray(jadwal.r)) {
-      const mm = jadwal.m || {};
-      jadwal = {
-        universitas: jadwal.u || 'Universitas Muria Kudus',
-        fakultas: jadwal.f || '',
-        semester: jadwal.s || '',
-        mahasiswa: {
-          nama: mm.n || '', nim: mm.i || '', prodi: mm.p || '', dosen_pa: mm.d || '',
-          total_sks: mm.t || '', tanggal_cetak: mm.c || ''
-        },
-        mata_kuliah: jadwal.r.map((r,idx) => ({
-          no: r?.[0] ?? String(idx+1), kelas: r?.[1] ?? '', kode_mk: r?.[2] ?? '',
-          nama_mk: r?.[3] ?? '', dosen: r?.[4] ?? '', sks: r?.[5] ?? '',
-          sn: r?.[6] ?? '', sl: r?.[7] ?? '', rb: r?.[8] ?? '', km: r?.[9] ?? '',
-          jm: r?.[10] ?? '', sb: r?.[11] ?? '', mg: r?.[12] ?? ''
-        }))
-      };
-    }
+    if (!jadwal || !Array.isArray(jadwal.mata_kuliah) || !jadwal.mata_kuliah.length) {
+      const thinking = String(data?.message?.thinking || '').trim();
+      const preview = parsed?.raw || thinking || '(respons kosong)';
+      throw new Error('AI belum menghasilkan JSON jadwal yang valid.
 
-    if (!jadwal || !Array.isArray(jadwal.mata_kuliah)) {
-      const thinking = String(data.message?.thinking || '').trim();
-      const preview = raw || thinking || '(respons kosong)';
-      throw new Error('AI belum menghasilkan JSON jadwal yang valid.\n\nOutput: ' + preview.slice(0,500));
+Output: ' + preview.slice(0,500));
     }
 
     // HTML dibuat oleh aplikasi, bukan oleh AI. Ini jauh lebih cepat dan tidak mudah terpotong.
