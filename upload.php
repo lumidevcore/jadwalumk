@@ -94,7 +94,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
     <div class="logo">UMK</div>
     <div>
       <h1>Upload Jadwal</h1>
-      <p>Universitas Muria Kudus <span style="margin-left:6px;color:#d4a030;font-weight:800">v6.5</span></p>
+      <p>Universitas Muria Kudus <span style="margin-left:6px;color:#d4a030;font-weight:800">v6.5.1</span></p>
     </div>
     <a href="index.php" class="back">← Kembali</a>
   </div>
@@ -907,9 +907,7 @@ WAJIB:
     if (!jadwal || !Array.isArray(jadwal.mata_kuliah) || !jadwal.mata_kuliah.length) {
       const thinking = String(data?.message?.thinking || '').trim();
       const preview = parsed?.raw || thinking || '(respons kosong)';
-      throw new Error('AI belum menghasilkan JSON jadwal yang valid.
-
-Output: ' + preview.slice(0,500));
+      throw new Error('AI belum menghasilkan JSON jadwal yang valid.\n\nOutput: ' + preview.slice(0,500));
     }
 
     // HTML dibuat oleh aplikasi, bukan oleh AI. Ini jauh lebih cepat dan tidak mudah terpotong.
