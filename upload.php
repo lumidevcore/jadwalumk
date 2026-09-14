@@ -376,7 +376,7 @@ async function pdfToText(file) {
 function textLooksLikeSchedule(text='') {
   const t = String(text).replace(/\s+/g,' ').trim();
   if (!t) return false;
-  const keywords = ['senin','selasa','rabu','kamis','jumat','jum'at','sks','mata kuliah','kode','kelas','dosen','ruang','jam'];
+  const keywords = ['senin','selasa','rabu','kamis','jumat',"jum\'at",'sks','mata kuliah','kode','kelas','dosen','ruang','jam'];
   const hits = keywords.reduce((n,k) => n + (t.toLowerCase().includes(k) ? 1 : 0), 0);
   // V4 memakai batas 250 karakter dan terlalu mudah salah fallback ke vision.
   // V5 menerima PDF text-layer yang pendek jika sinyal jadwal cukup kuat.
