@@ -1,0 +1,52 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+vendor/
+node_modules/
+
+# IDE / editor
+.vscode/
+.idea/
+*.code-workspace
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Temporary / cache
+tmp/
+temp/
+cache/
+*.tmp
+*.bak
+*.swp
+
+# Local database / dumps
+*.sqlite
+*.sqlite3
+*.db
+
+# Build / package files
+*.zip
+*.rar
+*.7z
+
+# Local Ollama / model files
+.ollama/
+models/
+
+# PHP tooling
+.phpunit.result.cache
+composer.phar
+
+# OneDrive sync artifacts
+~$*
+*.lnk

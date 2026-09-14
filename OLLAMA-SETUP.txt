@@ -1,0 +1,19 @@
+JADWAL UMK - OLLAMA LOCAL
+
+V4 FAST MODE
+- Jalankan start-ollama-cors.bat.
+- BAT akan menutup Ollama App GUI agar server tidak respawn/rebut port 11434.
+- Jangan buka Ollama App selama BAT/server manual hidup.
+- Upload.php memakai mode Otomatis Cepat: mencoba ekstrak teks PDF terlebih dahulu.
+- Jika PDF punya text layer, AI text-only dipakai dan tidak perlu vision.
+- Jika PDF scan/gambar, fallback ke qwen3-vl:4b dengan JPEG terkompresi.
+- Output AI memakai JSON ringkas untuk mengurangi token dan waktu generate.
+
+Jika ingin akurasi vision maksimum, pilih Mode Proses -> Vision Akurat.
+
+
+V5 FAST
+- OLLAMA_CONTEXT_LENGTH=8192 diset otomatis oleh BAT.
+- Auto mode menerima text-layer PDF dengan heuristik lebih fleksibel.
+- Jika harus vision, mode FAST mengirim maksimal 2 halaman pertama, JPEG lebih ringan, dan output dibatasi 900 token.
+- Tujuan: menghindari kasus 4095/4096 token truncated dan request 7-8 menit.
