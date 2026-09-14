@@ -79,6 +79,39 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
 .ov-title{color:#fff;font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:700}
 .ov-step{color:rgba(255,255,255,.55);font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;text-align:center;max-width:300px;line-height:1.6}
 .ov-step b{color:#d4a030}
+
+/* Review & editor sebelum simpan */
+.review-overlay{display:none;position:fixed;inset:0;background:#eef1f7;z-index:1200;overflow:auto;padding:18px}
+.review-overlay.show{display:block}
+.review-shell{max-width:1500px;margin:0 auto}
+.review-topbar{position:sticky;top:0;z-index:5;background:rgba(238,241,247,.96);backdrop-filter:blur(10px);display:flex;align-items:center;gap:12px;padding:10px 0 14px}
+.review-topbar h2{font-size:17px;color:var(--navy);margin-right:auto}
+.review-topbar p{font-size:11px;color:var(--muted)}
+.review-btn{border:1px solid var(--border);background:#fff;color:var(--navy);border-radius:10px;padding:10px 14px;font:700 12px 'Plus Jakarta Sans',sans-serif;cursor:pointer}
+.review-btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+.review-btn.danger{color:#8b0000}
+.preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.preview-card,.edit-card{background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 4px 22px rgba(13,31,60,.06)}
+.preview-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
+.preview-head h3{font-size:12px;color:var(--navy)}
+.preview-frame{width:100%;height:520px;border:0;background:#fff}
+.edit-card{padding:14px}
+.edit-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.edit-title h3{font-size:13px;color:var(--navy)}
+.edit-title span{font-size:11px;color:var(--muted)}
+.drag-grid{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:10px;overflow-x:auto;padding-bottom:4px}
+.drag-day{background:#f7f8fb;border:1px solid var(--border);border-radius:12px;min-height:180px;padding:8px}
+.drag-day.over{outline:2px dashed var(--gold);background:#fff8e6}
+.drag-day-head{background:var(--navy);color:#fff;text-align:center;border-radius:8px;padding:8px;font-size:11px;font-weight:800;margin-bottom:8px}
+.drag-item{background:#fff;border:1px solid var(--border);border-radius:10px;padding:9px;margin-bottom:7px;cursor:grab;box-shadow:0 2px 8px rgba(13,31,60,.06)}
+.drag-item:active{cursor:grabbing}
+.drag-item .di-name{font-size:11px;font-weight:800;color:var(--navy);line-height:1.35}
+.drag-item .di-code{font-size:9px;color:var(--muted);margin-top:2px}
+.drag-item input{width:100%;margin-top:7px;border:1px solid var(--border);border-radius:7px;padding:6px 7px;font:600 10px 'Plus Jakarta Sans',sans-serif;color:var(--text);background:#fafbfe}
+.drag-empty{font-size:10px;color:var(--muted);text-align:center;padding:20px 4px;font-style:italic}
+.review-note{font-size:11px;color:#7a5800;background:#fff8e6;border:1px solid #f5c842;border-radius:10px;padding:10px 12px;margin-bottom:12px;line-height:1.6}
+@media(max-width:1000px){.preview-grid{grid-template-columns:1fr}.preview-frame{height:420px}.drag-grid{grid-template-columns:repeat(7,170px)}}
+
 </style>
 </head>
 <body>
@@ -94,7 +127,7 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
     <div class="logo">UMK</div>
     <div>
       <h1>Upload Jadwal</h1>
-      <p>Universitas Muria Kudus <span style="margin-left:6px;color:#d4a030;font-weight:800">v6.5.1</span></p>
+      <p>Universitas Muria Kudus <span style="margin-left:6px;color:#d4a030;font-weight:800">v6.6</span></p>
     </div>
     <a href="index.php" class="back">← Kembali</a>
   </div>
@@ -169,6 +202,45 @@ hr{border:none;border-top:1px solid var(--border);margin:18px 0}
   </button>
 </div>
 
+
+<div class="review-overlay" id="reviewOverlay">
+  <div class="review-shell">
+    <div class="review-topbar">
+      <div>
+        <h2>Review Hasil AI</h2>
+        <p>Belum disimpan. Cocokkan PDF asli dengan hasil AI, lalu edit jadwal bila perlu.</p>
+      </div>
+      <button class="review-btn danger" type="button" onclick="cancelReview()">Batal</button>
+      <button class="review-btn" type="button" onclick="refreshAiPreview()">↻ Refresh Preview</button>
+      <button class="review-btn primary" type="button" id="saveReviewBtn" onclick="savePending()">Simpan Hasil</button>
+    </div>
+
+    <div class="review-note">
+      <strong>Editor drag & drop:</strong> seret kartu mata kuliah ke hari yang benar.
+      Kolom jam/ruang dapat diedit langsung. Perubahan akan terlihat pada Preview Hasil AI.
+    </div>
+
+    <div class="preview-grid">
+      <div class="preview-card">
+        <div class="preview-head"><h3>Preview PDF Asli</h3><span id="pdfPreviewName"></span></div>
+        <iframe class="preview-frame" id="pdfPreview"></iframe>
+      </div>
+      <div class="preview-card">
+        <div class="preview-head"><h3>Preview Hasil AI</h3><span>Belum disimpan</span></div>
+        <iframe class="preview-frame" id="aiPreview"></iframe>
+      </div>
+    </div>
+
+    <div class="edit-card">
+      <div class="edit-title">
+        <h3>Edit Posisi Jadwal</h3>
+        <span>Drag kartu ke hari yang sesuai dengan PDF.</span>
+      </div>
+      <div class="drag-grid" id="dragGrid"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 // PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -182,6 +254,8 @@ let selFile = null, ollamaOk = false;
 let lastDiag = [];
 let installedModels = [];
 let visionModels = [];
+let pendingJadwal = null;
+let pdfObjectUrl = null;
 
 
 function esc(s='') {
@@ -808,6 +882,156 @@ async function askOllamaJson(model, prompt, images, timeoutMs=480000, numCtx=122
   }
 }
 
+
+const REVIEW_DAYS = [
+  ['sn','Senin'],['sl','Selasa'],['rb','Rabu'],['km','Kamis'],['jm','Jumat'],['sb','Sabtu'],['mg','Minggu']
+];
+
+function getRowDay(r) {
+  for (const [k] of REVIEW_DAYS) {
+    if (String(r?.[k] || '').trim()) return k;
+  }
+  return 'sn';
+}
+
+function renderDragEditor() {
+  const grid = document.getElementById('dragGrid');
+  if (!pendingJadwal || !Array.isArray(pendingJadwal.mata_kuliah)) {
+    grid.innerHTML = '';
+    return;
+  }
+
+  grid.innerHTML = REVIEW_DAYS.map(([key,label]) => {
+    const items = pendingJadwal.mata_kuliah
+      .map((r,idx) => ({r,idx}))
+      .filter(x => getRowDay(x.r) === key);
+
+    const cards = items.map(({r,idx}) => {
+      const val = String(r[key] || '');
+      return `<div class="drag-item" draggable="true" data-row="${idx}"
+        ondragstart="dragScheduleStart(event,${idx})">
+        <div class="di-name">${esc(r.nama_mk || '(Tanpa nama)')}</div>
+        <div class="di-code">${esc(r.kode_mk || '')} · Kelas ${esc(r.kelas || '-')}</div>
+        <input value="${esc(val)}" placeholder="Jam + ruang, contoh 09:40-11:19 J.4,06"
+          oninput="editScheduleValue(${idx},'${key}',this.value)" onclick="event.stopPropagation()">
+      </div>`;
+    }).join('');
+
+    return `<div class="drag-day" data-day="${key}"
+      ondragover="dragScheduleOver(event)"
+      ondragleave="dragScheduleLeave(event)"
+      ondrop="dropSchedule(event,'${key}')">
+      <div class="drag-day-head">${label}</div>
+      ${cards || '<div class="drag-empty">Tarik jadwal ke sini</div>'}
+    </div>`;
+  }).join('');
+}
+
+function dragScheduleStart(e, rowIndex) {
+  e.dataTransfer.setData('text/plain', String(rowIndex));
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function dragScheduleOver(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add('over');
+  e.dataTransfer.dropEffect = 'move';
+}
+
+function dragScheduleLeave(e) {
+  e.currentTarget.classList.remove('over');
+}
+
+function dropSchedule(e, targetDay) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('over');
+  const idx = parseInt(e.dataTransfer.getData('text/plain'), 10);
+  if (!Number.isInteger(idx) || !pendingJadwal?.mata_kuliah?.[idx]) return;
+
+  const row = pendingJadwal.mata_kuliah[idx];
+  let oldValue = '';
+  for (const [k] of REVIEW_DAYS) {
+    if (!oldValue && String(row[k] || '').trim()) oldValue = String(row[k] || '').trim();
+    row[k] = '';
+  }
+  row[targetDay] = oldValue || '';
+  renderDragEditor();
+  refreshAiPreview();
+}
+
+function editScheduleValue(idx, day, value) {
+  const row = pendingJadwal?.mata_kuliah?.[idx];
+  if (!row) return;
+  for (const [k] of REVIEW_DAYS) {
+    if (k !== day) row[k] = '';
+  }
+  row[day] = value;
+  clearTimeout(editScheduleValue._t);
+  editScheduleValue._t = setTimeout(refreshAiPreview, 250);
+}
+
+function refreshAiPreview() {
+  if (!pendingJadwal) return;
+  document.getElementById('aiPreview').srcdoc = buildScheduleHtml(pendingJadwal);
+}
+
+function openReview(jadwal) {
+  pendingJadwal = JSON.parse(JSON.stringify(jadwal));
+  if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl);
+  pdfObjectUrl = URL.createObjectURL(selFile);
+
+  document.getElementById('pdfPreview').src = pdfObjectUrl;
+  document.getElementById('pdfPreviewName').textContent = selFile?.name || '';
+  renderDragEditor();
+  refreshAiPreview();
+  document.getElementById('reviewOverlay').classList.add('show');
+}
+
+function cancelReview() {
+  document.getElementById('reviewOverlay').classList.remove('show');
+  pendingJadwal = null;
+  if (pdfObjectUrl) {
+    URL.revokeObjectURL(pdfObjectUrl);
+    pdfObjectUrl = null;
+  }
+  document.getElementById('btn').disabled = false;
+}
+
+async function savePending() {
+  if (!pendingJadwal) return;
+  const saveBtn = document.getElementById('saveReviewBtn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Menyimpan...';
+
+  try {
+    const html = buildScheduleHtml(pendingJadwal);
+    const meta = {
+      nama: pendingJadwal.mahasiswa?.nama || '',
+      nim: pendingJadwal.mahasiswa?.nim || '',
+      prodi: pendingJadwal.mahasiswa?.prodi || '',
+      dosen_pa: pendingJadwal.mahasiswa?.dosen_pa || '',
+      sks: parseInt(pendingJadwal.mahasiswa?.total_sks || 0, 10) || 0,
+      semester: pendingJadwal.semester || '',
+      dicetak: pendingJadwal.mahasiswa?.tanggal_cetak || ''
+    };
+
+    const sr = await fetch('api/jadwal.php?action=save_html', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({html, meta})
+    });
+    const sd = await sr.json();
+    if (!sd.success) throw new Error(sd.error || 'Gagal menyimpan.');
+
+    if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl);
+    window.location.href = 'index.php';
+  } catch (err) {
+    alert('Gagal menyimpan: ' + (err?.message || err));
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Simpan Hasil';
+  }
+}
+
 // ── Main process ──
 async function run() {
   if (!selFile || !ollamaOk) return;
@@ -910,32 +1134,12 @@ WAJIB:
       throw new Error('AI belum menghasilkan JSON jadwal yang valid.\n\nOutput: ' + preview.slice(0,500));
     }
 
-    // HTML dibuat oleh aplikasi, bukan oleh AI. Ini jauh lebih cepat dan tidak mudah terpotong.
-    const html = buildScheduleHtml(jadwal);
 
-    // 3. Simpan ke server
-    setStep('Menyimpan ke server...');
-    const meta = {
-      nama: jadwal.mahasiswa?.nama || '',
-      nim: jadwal.mahasiswa?.nim || '',
-      prodi: jadwal.mahasiswa?.prodi || '',
-      dosen_pa: jadwal.mahasiswa?.dosen_pa || '',
-      sks: parseInt(jadwal.mahasiswa?.total_sks || 0, 10) || 0,
-      semester: jadwal.semester || '',
-      dicetak: jadwal.mahasiswa?.tanggal_cetak || ''
-    };
-
-    const sr = await fetch('api/jadwal.php?action=save_html', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({html, meta})
-    });
-    const sd = await sr.json();
-    if (!sd.success) throw new Error('Gagal simpan ke DB: ' + sd.error);
-
-    setStep('✓ Selesai!');
-    await new Promise(r => setTimeout(r, 600));
-    window.location.href = 'index.php';
+    // Jangan langsung simpan. Buka tahap review/edit terlebih dahulu.
+    setStep('✓ Analisis AI selesai. Membuka editor...');
+    await new Promise(r => setTimeout(r, 250));
+    document.getElementById('ov').classList.remove('show');
+    openReview(jadwal);
 
   } catch(err) {
     document.getElementById('ov').classList.remove('show');
